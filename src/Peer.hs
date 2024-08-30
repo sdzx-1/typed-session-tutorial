@@ -48,9 +48,11 @@ clientPeer i valRef = I.do
       yield (CheckVal val)
       await I.>>= \case
         CheckSuccessed -> clientPeer (i + 1) valRef
-        CheckFailed st -> I.do
-          yield (CheckErrorHappened st)
-          returnAt (Left st)
+        (CheckFailed st) -> I.do
+          liftm $ putStrLn st
+          yield (Fix val)
+          FixFinish <- await
+          clientPeer i valRef
 
 serverPeer :: Peer PingPongRole PingPong Server IO (At (Either String ()) (Done Server)) (S1 s)
 serverPeer = I.do
@@ -59,7 +61,6 @@ serverPeer = I.do
       yield Pong
       serverPeer
     ServerStop -> returnAt (Right ())
-    CheckErrorHappened st -> returnAt (Left st)
 
 checkFun :: Int -> Int -> CheckResultFun IO
 checkFun val ci =
@@ -89,4 +90,6 @@ counterPeer val = I.do
                   <> ", check value is "
                   <> show ci
           yield (CheckFailed reason)
-          returnAt (Left reason)
+          (Fix newVal) <- await
+          yield FixFinish
+          counterPeer newVal
