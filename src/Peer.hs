@@ -13,11 +13,11 @@ import TypedSession.Core
 clientPeer :: Peer PingPongRole PingPong Client IO (At () (Done Client)) S0
 clientPeer = I.do
   yield Ping
-  Recv Pong <- await
+  Pong <- await
   returnAt ()
 
 serverPeer :: Peer PingPongRole PingPong Server IO (At () (Done Server)) S0
 serverPeer = I.do
-  Recv Ping <- await
+  Ping <- await
   yield Pong
   returnAt ()
