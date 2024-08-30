@@ -60,7 +60,9 @@ runTCPClient = withSocketsDo $ do
     putStrLn $ "Client val is: " <> show res
 
 runTCPServer :: IO ()
-runTCPServer = runTCPServer' Nothing "3000" "Server" SClient serverPeer
+runTCPServer = do
+  val <- runTCPServer' Nothing "3000" "Server" SClient serverPeer
+  putStrLn $ "Server val is: " <> show val
 
 runTCPCounter :: IO ()
 runTCPCounter = do

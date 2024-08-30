@@ -38,6 +38,17 @@ Branch Client ChoiceNextAction {
     Msg ServerStop [] Client Server
     Msg CounterStop [] Client Counter
     Terminal
+  BranchSt Check []
+    Msg CheckVal [Int] Client Counter
+    Branch Counter CheckResult {
+      BranchSt Successed []
+        Msg CheckSuccessed [] Counter Client
+        Goto 0
+      BranchSt Failed []
+        Msg CheckFailed [String] Counter Client
+        Msg CheckErrorHappened [String] Client Server
+        Terminal
+    }
 }
 |]
 instance Show (AnyMsg PingPongRole PingPong) where
@@ -47,6 +58,10 @@ instance Show (AnyMsg PingPongRole PingPong) where
     Add i -> "Add " <> show i
     ServerStop -> "ServerStop"
     CounterStop -> "CounterStop"
+    CheckVal i -> "CheckVal " <> show i
+    CheckSuccessed -> "CheckSuccessed"
+    CheckFailed st -> "CheckFailed " <> st
+    CheckErrorHappened st -> "CheckErrorHappened" <> st
 
 encodeMsg :: Encode PingPongRole PingPong L.ByteString
 encodeMsg = Encode $ \x -> runPut $ case x of
@@ -55,6 +70,10 @@ encodeMsg = Encode $ \x -> runPut $ case x of
   Add i -> putWord8 2 >> put i
   ServerStop -> putWord8 3
   CounterStop -> putWord8 4
+  CheckVal i -> putWord8 5 >> put i
+  CheckSuccessed -> putWord8 6
+  CheckFailed st -> putWord8 7 >> put st
+  CheckErrorHappened st -> putWord8 8 >> put st
 
 getAnyMsg :: Get (AnyMsg PingPongRole PingPong)
 getAnyMsg = do
@@ -67,6 +86,16 @@ getAnyMsg = do
       return $ AnyMsg $ Add i
     3 -> return $ AnyMsg ServerStop
     4 -> return $ AnyMsg CounterStop
+    5 -> do
+      i <- get
+      return $ AnyMsg $ CheckVal i
+    6 -> return $ AnyMsg CheckSuccessed
+    7 -> do
+      st <- get
+      return $ AnyMsg (CheckFailed st)
+    8 -> do
+      st <- get
+      return $ AnyMsg (CheckErrorHappened st)
     _ -> fail "Invalid message tag"
 
 convertDecoderLBS

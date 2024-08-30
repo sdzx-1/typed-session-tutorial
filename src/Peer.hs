@@ -1,6 +1,7 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE QualifiedDo #-}
 {-# LANGUAGE TypeApplications #-}
 
@@ -16,14 +17,16 @@ import TypedSession.Core
 
 choice :: Int -> ChoiceNextActionFun IO
 choice i = do
-  if i == 100
-    then liftConstructor BranchSt_Finish
-    else liftConstructor BranchSt_Continue
+  if
+    | i == 101 -> liftConstructor BranchSt_Finish
+    | i == 100 -> liftConstructor BranchSt_Check
+    | i `mod` 10 == 0 -> liftConstructor BranchSt_Check
+    | otherwise -> liftConstructor BranchSt_Continue
 
 clientPeer
   :: Int
   -> IORef Int
-  -> Peer PingPongRole PingPong Client IO (At Int (Done Client)) S0
+  -> Peer PingPongRole PingPong Client IO (At (Either String Int) (Done Client)) S0
 clientPeer i valRef = I.do
   choice i I.>>= \case
     BranchSt_Continue -> I.do
@@ -39,19 +42,51 @@ clientPeer i valRef = I.do
       yield ServerStop
       yield CounterStop
       At val <- liftm $ readIORef valRef
-      returnAt val
+      returnAt (Right val)
+    BranchSt_Check -> I.do
+      At val <- liftm $ readIORef valRef
+      yield (CheckVal val)
+      await I.>>= \case
+        CheckSuccessed -> clientPeer (i + 1) valRef
+        CheckFailed st -> I.do
+          yield (CheckErrorHappened st)
+          returnAt (Left st)
 
-serverPeer :: Peer PingPongRole PingPong Server IO (At () (Done Server)) (S1 s)
+serverPeer :: Peer PingPongRole PingPong Server IO (At (Either String ()) (Done Server)) (S1 s)
 serverPeer = I.do
   await I.>>= \case
     Ping -> I.do
       yield Pong
       serverPeer
-    ServerStop -> returnAt ()
+    ServerStop -> returnAt (Right ())
+    CheckErrorHappened st -> returnAt (Left st)
 
-counterPeer :: Int -> Peer PingPongRole PingPong Counter IO (At Int (Done Server)) (S2 s)
+checkFun :: Int -> Int -> CheckResultFun IO
+checkFun val ci =
+  if val == ci
+    then liftConstructor BranchSt_Successed
+    else liftConstructor BranchSt_Failed
+
+counterPeer :: Int -> Peer PingPongRole PingPong Counter IO (At (Either String Int) (Done Server)) (S2 s)
 counterPeer val = I.do
   liftm $ putStrLn $ "Counter val is: " ++ show val
   await I.>>= \case
-    Add i -> counterPeer (val + i)
-    CounterStop -> returnAt val
+    Add i -> I.do
+      At rval <- liftm $ randomRIO @Int (0, 1000)
+      -- 0.995^100 ~= 0.6
+      let nval = val + if rval < 995 then i else (i - 1)
+      counterPeer nval
+    CounterStop -> returnAt (Right val)
+    CheckVal ci -> I.do
+      checkFun val ci I.>>= \case
+        BranchSt_Successed -> I.do
+          yield CheckSuccessed
+          counterPeer val
+        BranchSt_Failed -> I.do
+          let reason =
+                "Check failed, now value is "
+                  <> show val
+                  <> ", check value is "
+                  <> show ci
+          yield (CheckFailed reason)
+          returnAt (Left reason)
