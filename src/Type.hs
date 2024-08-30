@@ -6,7 +6,7 @@ module Type where
 import Language.Haskell.TH.Quote (QuasiQuoter)
 import TypedSession.TH (protocol)
 
-data PingPongRole = Client | Server
+data PingPongRole = Client | Server | Counter
   deriving (Show, Eq, Ord, Enum, Bounded)
 
 data PingPongBranchSt = PingPongBranchSt

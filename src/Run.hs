@@ -8,10 +8,12 @@ import Control.Concurrent.Class.MonadSTM
 import qualified Control.Exception as E
 import Control.Monad (void)
 import Control.Monad.Class.MonadFork (forkIO, killThread)
+import Data.IFunctor (At)
 import qualified Data.IntMap as IntMap
 import Network.Socket
 import Peer
 import Protocol
+import Type
 import TypedSession.Codec
 import qualified TypedSession.Codec as C
 import TypedSession.Core
@@ -35,27 +37,41 @@ runTCPClient = withSocketsDo $ do
   E.bracket
     ( do
         serverSock <- getSocket "127.0.0.1" "3000"
-        pure serverSock
+        counterSock <- getSocket "127.0.0.1" "3001"
+        pure (serverSock, counterSock)
     )
-    (\a -> close a)
+    (\(a, b) -> close a >> close b)
     client
  where
-  client serverSock = do
+  client (serverSock, counterSock) = do
     let serverChannel = socketAsChannel serverSock
+        counterChannel = socketAsChannel counterSock
     clientDriver <-
       driverSimple
         (myTracer "client: ")
         encodeMsg
         (Decode decodeMsg)
-        [(SomeRole SServer, serverChannel)]
+        [(SomeRole SServer, serverChannel)
+        ,(SomeRole SCounter, counterChannel)]
         id
     void $ runPeerWithDriver clientDriver clientPeer
 
 runTCPServer :: IO ()
-runTCPServer = runTCPServer' Nothing "3000"
+runTCPServer = runTCPServer' Nothing "3000" "Server" SClient serverPeer
 
-runTCPServer' :: Maybe HostName -> ServiceName -> IO ()
-runTCPServer' mhost port = withSocketsDo $ do
+runTCPCounter :: IO ()
+runTCPCounter = do
+  val <- runTCPServer' Nothing "3001" "Counter" SClient (counterPeer 0)
+  putStrLn $ "Counter val is: " <> show val
+
+runTCPServer'
+  :: Maybe HostName
+  -> ServiceName
+  -> String
+  -> SPingPongRole client
+  -> Peer PingPongRole PingPong server IO (At a (Done server)) s
+  -> IO a
+runTCPServer' mhost port name sclient peer = withSocketsDo $ do
   addr <- resolve
   E.bracket (open addr) close start
  where
@@ -79,10 +95,11 @@ runTCPServer' mhost port = withSocketsDo $ do
     let clientChannel = socketAsChannel client
     serverDriver <-
       driverSimple
-        (myTracer "server: ")
+        (myTracer (name ++ ": "))
         encodeMsg
         (Decode decodeMsg)
-        [(SomeRole SClient, clientChannel)]
+        [(SomeRole sclient, clientChannel)]
         id
-    void $ runPeerWithDriver serverDriver serverPeer
+    a <- runPeerWithDriver serverDriver peer
     close client
+    pure a

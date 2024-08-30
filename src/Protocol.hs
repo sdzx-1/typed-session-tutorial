@@ -12,6 +12,7 @@
 
 module Protocol where
 
+import Data.Binary (Binary (get), put)
 import Data.Binary.Get
 import Data.Binary.Put
 import qualified Data.ByteString as BS
@@ -28,6 +29,7 @@ import TypedSession.Driver
 
 Msg Ping [] Client Server
 Msg Pong [] Server Client
+Msg Add [Int] Client Counter
 Terminal
 
 |]
@@ -36,11 +38,13 @@ instance Show (AnyMsg PingPongRole PingPong) where
   show (AnyMsg msg) = case msg of
     Ping -> "Ping"
     Pong -> "Pong"
+    Add i -> "Add " ++ show i
 
 encodeMsg :: Encode PingPongRole PingPong L.ByteString
 encodeMsg = Encode $ \x -> runPut $ case x of
   Ping -> putWord8 0
   Pong -> putWord8 1
+  Add i -> putWord8 2 >> put i
 
 getAnyMsg :: Get (AnyMsg PingPongRole PingPong)
 getAnyMsg = do
@@ -48,6 +52,9 @@ getAnyMsg = do
   case tag of
     0 -> return $ AnyMsg Ping
     1 -> return $ AnyMsg Pong
+    2 -> do
+      i <- get
+      return $ AnyMsg (Add i)
     _ -> fail "Invalid message tag"
 
 convertDecoderLBS
