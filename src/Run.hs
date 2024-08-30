@@ -54,7 +54,7 @@ runTCPClient = withSocketsDo $ do
         [(SomeRole SServer, serverChannel)
         ,(SomeRole SCounter, counterChannel)]
         id
-    void $ runPeerWithDriver clientDriver clientPeer
+    void $ runPeerWithDriver clientDriver (clientPeer 0)
 
 runTCPServer :: IO ()
 runTCPServer = runTCPServer' Nothing "3000" "Server" SClient serverPeer

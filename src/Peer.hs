@@ -1,5 +1,6 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE QualifiedDo #-}
 
 module Peer where
@@ -10,21 +11,36 @@ import Protocol
 import Type
 import TypedSession.Core
 
-clientPeer :: Peer PingPongRole PingPong Client IO (At () (Done Client)) S0
-clientPeer = I.do
-  yield Ping
-  Pong <- await
-  yield (Add 1)
-  clientPeer
+choice :: Int -> ChoiceNextActionFun IO
+choice i = do
+  if i == 100
+    then liftConstructor BranchSt_Finish
+    else liftConstructor BranchSt_Continue
 
-serverPeer :: Peer PingPongRole PingPong Server IO (At () (Done Server)) S0
+clientPeer :: Int -> Peer PingPongRole PingPong Client IO (At () (Done Client)) S0
+clientPeer i = I.do
+  choice i I.>>= \case
+    BranchSt_Continue -> I.do
+      yield Ping
+      Pong <- await
+      yield (Add 1)
+      clientPeer (i + 1)
+    BranchSt_Finish -> I.do
+      yield ServerStop
+      yield CounterStop
+      returnAt ()
+
+serverPeer :: Peer PingPongRole PingPong Server IO (At () (Done Server)) (S1 s)
 serverPeer = I.do
-  Ping <- await
-  yield Pong
-  serverPeer
+  await I.>>= \case
+    Ping -> I.do
+      yield Pong
+      serverPeer
+    ServerStop -> returnAt ()
 
-counterPeer :: Int -> Peer PingPongRole PingPong Counter IO (At Int (Done Counter)) S1
+counterPeer :: Int -> Peer PingPongRole PingPong Counter IO (At Int (Done Server)) (S2 s)
 counterPeer val = I.do
   liftm $ putStrLn $ "Counter val is: " ++ show val
-  Add i <- await
-  counterPeer (val + i)
+  await I.>>= \case
+    Add i -> counterPeer (val + i)
+    CounterStop -> returnAt val

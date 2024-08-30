@@ -28,24 +28,33 @@ import TypedSession.Driver
 [pingpongProtocol|
 
 Label 0
-Msg Ping [] Client Server
-Msg Pong [] Server Client
-Msg Add [Int] Client Counter
-Goto 0
-
+Branch Client ChoiceNextAction {
+  BranchSt Continue []
+    Msg Ping [] Client Server
+    Msg Pong [] Server Client
+    Msg Add [Int] Client Counter
+    Goto 0
+  BranchSt Finish []
+    Msg ServerStop [] Client Server
+    Msg CounterStop [] Client Counter
+    Terminal
+}
 |]
-
 instance Show (AnyMsg PingPongRole PingPong) where
   show (AnyMsg msg) = case msg of
     Ping -> "Ping"
     Pong -> "Pong"
-    Add i -> "Add " ++ show i
+    Add i -> "Add " <> show i
+    ServerStop -> "ServerStop"
+    CounterStop -> "CounterStop"
 
 encodeMsg :: Encode PingPongRole PingPong L.ByteString
 encodeMsg = Encode $ \x -> runPut $ case x of
   Ping -> putWord8 0
   Pong -> putWord8 1
   Add i -> putWord8 2 >> put i
+  ServerStop -> putWord8 3
+  CounterStop -> putWord8 4
 
 getAnyMsg :: Get (AnyMsg PingPongRole PingPong)
 getAnyMsg = do
@@ -55,7 +64,9 @@ getAnyMsg = do
     1 -> return $ AnyMsg Pong
     2 -> do
       i <- get
-      return $ AnyMsg (Add i)
+      return $ AnyMsg $ Add i
+    3 -> return $ AnyMsg ServerStop
+    4 -> return $ AnyMsg CounterStop
     _ -> fail "Invalid message tag"
 
 convertDecoderLBS
