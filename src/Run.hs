@@ -9,6 +9,7 @@ import qualified Control.Exception as E
 import Control.Monad (void)
 import Control.Monad.Class.MonadFork (forkIO, killThread)
 import Data.IFunctor (At)
+import Data.IORef
 import qualified Data.IntMap as IntMap
 import Network.Socket
 import Peer
@@ -54,7 +55,9 @@ runTCPClient = withSocketsDo $ do
         [(SomeRole SServer, serverChannel)
         ,(SomeRole SCounter, counterChannel)]
         id
-    void $ runPeerWithDriver clientDriver (clientPeer 0)
+    valRef <- newIORef 0
+    res <- runPeerWithDriver clientDriver (clientPeer 0 valRef)
+    putStrLn $ "Client val is: " <> show res
 
 runTCPServer :: IO ()
 runTCPServer = runTCPServer' Nothing "3000" "Server" SClient serverPeer

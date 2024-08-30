@@ -2,12 +2,15 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE QualifiedDo #-}
+{-# LANGUAGE TypeApplications #-}
 
 module Peer where
 
-import Data.IFunctor (At, returnAt)
+import Data.IFunctor (At (..), returnAt)
 import qualified Data.IFunctor as I
+import Data.IORef
 import Protocol
+import System.Random (randomRIO)
 import Type
 import TypedSession.Core
 
@@ -17,18 +20,26 @@ choice i = do
     then liftConstructor BranchSt_Finish
     else liftConstructor BranchSt_Continue
 
-clientPeer :: Int -> Peer PingPongRole PingPong Client IO (At () (Done Client)) S0
-clientPeer i = I.do
+clientPeer
+  :: Int
+  -> IORef Int
+  -> Peer PingPongRole PingPong Client IO (At Int (Done Client)) S0
+clientPeer i valRef = I.do
   choice i I.>>= \case
     BranchSt_Continue -> I.do
       yield Ping
       Pong <- await
-      yield (Add 1)
-      clientPeer (i + 1)
+      At randVal <- liftm $ do
+        rval <- randomRIO @Int (0, 100)
+        modifyIORef valRef (+ rval)
+        pure rval
+      yield (Add randVal)
+      clientPeer (i + 1) valRef
     BranchSt_Finish -> I.do
       yield ServerStop
       yield CounterStop
-      returnAt ()
+      At val <- liftm $ readIORef valRef
+      returnAt val
 
 serverPeer :: Peer PingPongRole PingPong Server IO (At () (Done Server)) (S1 s)
 serverPeer = I.do
