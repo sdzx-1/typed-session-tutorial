@@ -27,10 +27,11 @@ import TypedSession.Driver
 
 [pingpongProtocol|
 
+Label 0
 Msg Ping [] Client Server
 Msg Pong [] Server Client
 Msg Add [Int] Client Counter
-Terminal
+Goto 0
 
 |]
 

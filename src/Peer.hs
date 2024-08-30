@@ -15,15 +15,16 @@ clientPeer = I.do
   yield Ping
   Pong <- await
   yield (Add 1)
-  returnAt ()
+  clientPeer
 
 serverPeer :: Peer PingPongRole PingPong Server IO (At () (Done Server)) S0
 serverPeer = I.do
   Ping <- await
   yield Pong
-  returnAt ()
+  serverPeer
 
 counterPeer :: Int -> Peer PingPongRole PingPong Counter IO (At Int (Done Counter)) S1
 counterPeer val = I.do
+  liftm $ putStrLn $ "Counter val is: " ++ show val
   Add i <- await
-  returnAt (val + i)
+  counterPeer (val + i)
