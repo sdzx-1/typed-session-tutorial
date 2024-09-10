@@ -9,6 +9,7 @@
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
+{-# OPTIONS_GHC -ddump-splices #-}
 
 module Protocol where
 
@@ -28,6 +29,8 @@ import TypedSession.Driver
 
 Msg Ping [] Client Server
 Msg Pong [] Server Client
+Msg Ping1 [] Client Server
+Msg Pong1 [] Server Client
 Terminal
 
 |]
