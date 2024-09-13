@@ -26,7 +26,7 @@ choice i = do
 clientPeer
   :: Int
   -> IORef Int
-  -> Peer PingPongRole PingPong Client IO (At (Either String Int) (Done Client)) S0
+  -> Peer PingPongRole PingPong Client IO (At (Either String Int) (Done Client)) ClientStartSt
 clientPeer i valRef = I.do
   choice i I.>>= \case
     BranchSt_Continue -> I.do
@@ -54,7 +54,7 @@ clientPeer i valRef = I.do
           FixFinish <- await
           clientPeer i valRef
 
-serverPeer :: Peer PingPongRole PingPong Server IO (At (Either String ()) (Done Server)) (S1 s)
+serverPeer :: Peer PingPongRole PingPong Server IO (At (Either String ()) (Done Server)) (ServerStartSt s)
 serverPeer = I.do
   await I.>>= \case
     Ping -> I.do
@@ -68,7 +68,7 @@ checkFun val ci =
     then liftConstructor BranchSt_Successed
     else liftConstructor BranchSt_Failed
 
-counterPeer :: Int -> Peer PingPongRole PingPong Counter IO (At (Either String Int) (Done Server)) (S2 s)
+counterPeer :: Int -> Peer PingPongRole PingPong Counter IO (At (Either String Int) (Done Server)) (CounterStartSt s)
 counterPeer val = I.do
   liftm $ putStrLn $ "Counter val is: " ++ show val
   await I.>>= \case
