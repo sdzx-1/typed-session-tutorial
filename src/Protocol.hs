@@ -1,19 +1,11 @@
 {-# LANGUAGE DataKinds #-}
-{-# LANGUAGE ExistentialQuantification #-}
-{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
-{-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE MagicHash #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE QualifiedDo #-}
-{-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE StandaloneKindSignatures #-}
-{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 
@@ -106,12 +98,17 @@ instance Protocol ExampleRole Example where
 
 ----------------------- serverPeer -------------------------
 {-
-Msg Ping,  Client ->  Server
+Msg Ping,  Client -> Server
 Msg Ping1, Client -> Server
 -}
 serverPeer :: Peer ExampleRole Example Server IO (At () (Done Server)) S0
 serverPeer = Protocol.do
   await Protocol.>>= \case
-    Ping -> Protocol.do
+    Ping ->
       await Protocol.>>= \case
+        -- This will generate a warning:
+        --   Pattern match has inaccessible right hand side
+        --      In a \case alternative: Ping1 -> ...compile(-Woverlapping-patterns)
+        -- 
+        -- But semantically there shouldn't be any warnings here.
         Ping1 -> returnAt ()
