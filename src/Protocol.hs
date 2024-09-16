@@ -4,8 +4,10 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE MagicHash #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE QualifiedDo #-}
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
@@ -13,79 +15,76 @@
 
 module Protocol where
 
-import Data.Binary.Get
-import Data.Binary.Put
-import qualified Data.ByteString as BS
-import qualified Data.ByteString.Builder.Extra as L
-import qualified Data.ByteString.Lazy as L
-import qualified Network.Socket as Socket
-import qualified Network.Socket.ByteString as Socket
-import Type
-import TypedSession.Codec
+import Data.IFunctor (At, returnAt)
+import qualified Data.IFunctor
+import qualified Data.IFunctor as I
+import GHC.Exts (DataToTag (..), Int (..))
 import TypedSession.Core
-import TypedSession.Driver
 
-[pingpongProtocol|
+-- [pingpongProtocol|
+-- Msg Ping [] Client Server
+-- Msg Ping1 [] Client Server
+-- Terminal
 
-Msg Ping [] Client Server
-Msg Pong [] Server Client
-Msg Ping1 [] Client Server
-Msg Pong1 [] Server Client
-Terminal
+-- | ]
+data PingPongRole = Client | Server
+  deriving (Show, Eq, Ord, Enum, Bounded)
 
-|]
+data PingPongBranchSt = PingPongBranchSt
+  deriving (Show, Eq, Ord, Enum, Bounded)
 
-instance Show (AnyMsg PingPongRole PingPong) where
-  show (AnyMsg msg) = case msg of
-    Ping -> "Ping"
-    Pong -> "Pong"
+data SPingPongRole (a_a2Vf :: PingPongRole) where
+  SClient :: SPingPongRole 'Client
+  SServer :: SPingPongRole 'Server
 
-encodeMsg :: Encode PingPongRole PingPong L.ByteString
-encodeMsg = Encode $ \x -> runPut $ case x of
-  Ping -> putWord8 0
-  Pong -> putWord8 1
+type instance Data.IFunctor.Sing = SPingPongRole
 
-getAnyMsg :: Get (AnyMsg PingPongRole PingPong)
-getAnyMsg = do
-  tag <- getWord8
-  case tag of
-    0 -> return $ AnyMsg Ping
-    1 -> return $ AnyMsg Pong
-    _ -> fail "Invalid message tag"
+instance Data.IFunctor.SingI 'Client where
+  sing = SClient
+instance Data.IFunctor.SingI 'Server where
+  sing = SServer
+instance SingToInt PingPongRole where
+  singToInt x_a2Vg =
+    I# (dataToTag# x_a2Vg)
 
-convertDecoderLBS
-  :: Decoder a
-  -> (DecodeStep L.ByteString CodecFailure a)
-convertDecoderLBS = go
- where
-  go :: Decoder a -> DecodeStep L.ByteString CodecFailure a
-  go (Done tr _ a) = DecodeDone a (Just $ L.fromStrict tr)
-  go (Fail _ _ e) = DecodeFail (CodecFailure e)
-  go (Partial k) = DecodePartial $ \mbs -> case mbs of
-    Nothing -> DecodeFail (CodecFailure "Peer disconnected!!")
-    Just bs -> go (k $ Just $ L.toStrict bs)
+data PingPong = End | S0 | S1
 
-decodeMsg
-  :: DecodeStep
-      L.ByteString
-      CodecFailure
-      (AnyMsg PingPongRole PingPong)
-decodeMsg = convertDecoderLBS (runGetIncremental getAnyMsg)
+data SPingPong (a_a2Vi :: PingPong) where
+  SEnd :: SPingPong 'End
+  SS0 :: SPingPong 'S0
+  SS1 :: SPingPong 'S1
+type instance Data.IFunctor.Sing = SPingPong
 
-socketAsChannel :: Socket.Socket -> Channel IO L.ByteString
-socketAsChannel socket =
-  Channel{send, recv}
- where
-  send :: L.ByteString -> IO ()
-  send chunks = do
-    Socket.sendMany socket (L.toChunks chunks)
+type ClientStartSt = 'S0
+type ServerStartSt = 'S0
 
-  recv :: IO (Maybe L.ByteString)
-  recv = do
-    chunk <- Socket.recv socket L.smallChunkSize
-    if BS.null chunk
-      then return Nothing
-      else return (Just (L.fromStrict chunk))
+instance Data.IFunctor.SingI 'End where
+  sing = SEnd
+instance Data.IFunctor.SingI 'S0 where
+  sing = SS0
+instance Data.IFunctor.SingI 'S1 where
+  sing = SS1
+instance SingToInt PingPong where
+  singToInt x_a2Vl =
+    I# (dataToTag# x_a2Vl)
 
-myTracer :: String -> Tracer PingPongRole PingPong IO
-myTracer st v = putStrLn (st <> show v)
+instance Protocol PingPongRole PingPong where
+  type Done 'Client = 'End
+  type Done 'Server = 'End
+  data
+    Msg
+      PingPongRole
+      PingPong
+      (from)
+      (send)
+      (sendNewSt)
+    where
+    Ping :: Msg PingPongRole PingPong 'S0 '(Client, S1) '(Server, S1)
+    Ping1 :: Msg PingPongRole PingPong 'S1 '(Client, End) '(Server, End)
+
+serverPeer :: Peer PingPongRole PingPong Server IO (At () (Done Server)) S0
+serverPeer = I.do
+  await I.>>= \case
+    Recv Ping -> I.do
+      await I.>>= \case
+        Recv Ping1 -> returnAt ()
