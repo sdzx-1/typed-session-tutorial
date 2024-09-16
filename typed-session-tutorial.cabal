@@ -68,7 +68,7 @@ library
 
     -- Other library packages from which modules are imported.
     build-depends:    base ^>=4.20.0.0
-                    , typed-session ^>= 0.1.3.0
+                    , typed-session ^>= 0.2.0.1
                     , io-classes
                     , template-haskell
                     , containers

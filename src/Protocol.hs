@@ -21,12 +21,7 @@ import qualified Data.IFunctor as I
 import GHC.Exts (DataToTag (..), Int (..))
 import TypedSession.Core
 
--- [pingpongProtocol|
--- Msg Ping [] Client Server
--- Msg Ping1 [] Client Server
--- Terminal
 
--- | ]
 data PingPongRole = Client | Server
   deriving (Show, Eq, Ord, Enum, Bounded)
 
@@ -75,16 +70,18 @@ instance Protocol PingPongRole PingPong where
     Msg
       PingPongRole
       PingPong
-      (from)
-      (send)
-      (sendNewSt)
+      (from :: PingPong)
+      (send :: PingPongRole)
+      (sendNewSt :: PingPong)
+      (recv :: PingPongRole)
+      (receiverNewSt :: PingPong)
     where
-    Ping :: Msg PingPongRole PingPong 'S0 '(Client, S1) '(Server, S1)
-    Ping1 :: Msg PingPongRole PingPong 'S1 '(Client, End) '(Server, End)
+    Ping :: Msg PingPongRole PingPong 'S0 'Client 'S1 'Server 'S1
+    Ping1 :: Msg PingPongRole PingPong 'S1 'Client 'End 'Server 'End
 
 serverPeer :: Peer PingPongRole PingPong Server IO (At () (Done Server)) S0
 serverPeer = I.do
   await I.>>= \case
-    Recv Ping -> I.do
+    Ping -> I.do
       await I.>>= \case
-        Recv Ping1 -> returnAt ()
+        Ping1 -> returnAt ()
