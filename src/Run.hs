@@ -41,13 +41,15 @@ runTCPClient = withSocketsDo $ do
     client
  where
   client serverSock = do
-    clientTvar <- newTVarIO IntMap.empty
     let serverChannel = socketAsChannel serverSock
-        sendMap = IntMap.fromList [(singToInt SServer, C.send serverChannel)]
-        clientDriver = driverSimple (myTracer "client: ") encodeMsg sendMap clientTvar id
-    thid1 <- forkIO $ decodeLoop (myTracer "client: ") Nothing (Decode decodeMsg) serverChannel clientTvar
+    clientDriver <-
+      driverSimple
+        (myTracer "client: ")
+        encodeMsg
+        (Decode decodeMsg)
+        [(SomeRole SServer, serverChannel)]
+        id
     void $ runPeerWithDriver clientDriver clientPeer
-    killThread thid1
 
 runTCPServer :: IO ()
 runTCPServer = runTCPServer' Nothing "3000"
@@ -75,10 +77,12 @@ runTCPServer' mhost port = withSocketsDo $ do
   start sock = do
     (client, _peer) <- accept sock
     let clientChannel = socketAsChannel client
-        sendMap = IntMap.fromList [(singToInt SClient, C.send clientChannel)]
-    serverTvar <- newTVarIO IntMap.empty
-    let serverDriver = driverSimple (myTracer "server: ") encodeMsg sendMap serverTvar id
-    thid1 <- forkIO $ decodeLoop (myTracer "server: ") Nothing (Decode decodeMsg) clientChannel serverTvar
+    serverDriver <-
+      driverSimple
+        (myTracer "server: ")
+        encodeMsg
+        (Decode decodeMsg)
+        [(SomeRole SClient, clientChannel)]
+        id
     void $ runPeerWithDriver serverDriver serverPeer
-    killThread thid1
     close client
